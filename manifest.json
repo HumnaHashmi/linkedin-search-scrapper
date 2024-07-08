@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Simple Scraper",
+  "version": "1.0",
+  "description": "A simple web scraper extension.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "cookies",
+    "tabs"  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.linkedin.com/sales/lists/people/*"],
+      
+      "js": ["content.js"]
+    }
+  ]
+  
+ 
+  
+ 
+}
