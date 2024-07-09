@@ -1,7 +1,19 @@
-(function() {
-    let currentPage = 1; // Still useful for logging
+document.getElementById('exportLeads').addEventListener('click', () => {
+    const startPage = parseInt(document.getElementById('startPage').value, 10);
+    const endPage = parseInt(document.getElementById('endPage').value, 10);
 
-    let allLeads = []; // Array to hold all leads scraped across pages.
+    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        chrome.scripting.executeScript({
+            target: {tabId: tabs[0].id},
+            function: scrapeLeads,
+            args: [startPage, endPage]
+        });
+    });
+});
+
+function scrapeLeads(startPage, endPage) {
+    let currentPage = startPage; // Initialize with start page
+    let allLeads = []; // Array to hold all leads scraped across pages
 
     // Create and add loading spinner to the document
     const spinner = document.createElement('div');
@@ -28,40 +40,28 @@
         }
     `;
     document.head.appendChild(style);
-    
 
     function scrapeDataFromPage() {
         let leads = [];
         const nameElements = document.querySelectorAll('.entity-result__title-text a span[aria-hidden="true"]');
-        // Select all job elements
         const jobElements = document.querySelectorAll('.entity-result__primary-subtitle');
+        const currentWorkingElements = document.querySelectorAll('.entity-result__summary');
+        const locationElement = document.querySelectorAll('.entity-result__secondary-subtitle');
         
-        // let jobTitles = [...document.querySelectorAll('[data-anonymize="job-title"]')].map(div => div.innerText.trim());
-        // let locationElement = [...document.querySelectorAll('td[data-anonymize="location"]')].map(div => div.innerText.trim());
 
-        // const companyLinkElement = [...document.querySelectorAll('td.artdeco-models-table-cell.list-people-detail-header__account a[href*="/sales/company/"]')].map(a => a.href.trim()); // If you want the href, you should directly access the href attribute
-
-        // // Select the span that contains the company name
-        // const companyNameElement = [...document.querySelectorAll('td.artdeco-models-table-cell.list-people-detail-header__account span[data-anonymize="company-name"]')].map(span => span.innerText.trim());
-
-        nameElements.forEach((nameElements, index) => {
-            let name = nameElements ? nameElements.textContent.trim() : 'N/A';
-            let jobTitle = jobElements[index] ? jobElements[index].textContent.trim() : 'N/A';
-          
-            // let location_Name = locationElement[index] || 'N/A';
-            // let company_name = index < companyNameElement.length ? companyNameElement[index] : 'N/A';
-            // let company_account_link = index < companyLinkElement.length ? companyLinkElement[index] : 'N/A';
+        nameElements.forEach((nameElement, index) => {
+            let name = nameElement ? nameElement.textContent.trim() : 'N/A';
+            let skills = jobElements[index] ? jobElements[index].textContent.trim() : 'N/A';
+            let currentWorking=currentWorkingElements[index] ?currentWorkingElements[index].textContent.trim():'N/A'
+            let location = locationElement[index] ? locationElement[index].textContent.trim() : 'N/A';
 
             leads.push({
                 name: name,
-                jobTitle: jobTitle
-                        //  title: jobTitle,
-                        // location: location_Name, company_Name: company_name,
-                        // company_link: company_account_link
-                     });
+                skills: skills,
+                currentWorking:currentWorking,
+                location
+            });
         });
-
-
 
         console.log(`Scraped ${leads.length} leads from page ${currentPage}`);
         allLeads.push(...leads); // Aggregate leads.
@@ -70,15 +70,20 @@
     }
 
     function loadNextPage() {
-        let nextPageButton = document.querySelector('button[aria-label="Next"], a[aria-label="Next"]');
-        if (nextPageButton) {
-            currentPage++;
-            console.log(`Moving to page ${currentPage}`);
-            nextPageButton.click();
-            waitForContentLoad(scrapeDataFromPage);
+        if (currentPage < endPage) {
+            let nextPageButton = document.querySelector('button[aria-label="Next"], a[aria-label="Next"]');
+            if (nextPageButton) {
+                currentPage++;
+                console.log(`Moving to page ${currentPage}`);
+                nextPageButton.click();
+                waitForContentLoad(scrapeDataFromPage);
+            } else {
+                console.log("Next page button not found, sending data to background.");
+                sendMessageToBackground(allLeads); // Send all aggregated leads to background when no more pages are found.
+            }
         } else {
-            console.log("All pages scraped or next page button not found, sending data to background.");
-            sendMessageToBackground(allLeads); // Send all aggregated leads to background when no more pages are found.
+            console.log("Reached end page, sending data to background.");
+            sendMessageToBackground(allLeads); // Send all aggregated leads to background when end page is reached.
         }
     }
 
@@ -102,7 +107,7 @@
         
         downloadButton.addEventListener('click', () => {
             const csvContent = "data:text/csv;charset=utf-8," + 
-                leads.map(e => e.name + ',' + e.jobTitle).join('\n');
+                leads.map(e => e.name + ',' + e.skills + ',' + currentWorking + ',' + location).join('\n');
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement('a');
             link.setAttribute('href', encodedUri);
@@ -128,4 +133,4 @@
     // Start scraping and show loading spinner
     spinner.style.display = 'block';
     scrapeDataFromPage();
-})();
+}
